@@ -53,7 +53,7 @@ CREATE TABLE persistent_rules (
 CREATE TABLE shutdown_state (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
   shutdown_time         TEXT NOT NULL,
-  whalewall_version     TEXT NOT NULL,
+  harborshield_version     TEXT NOT NULL,
   config_snapshot       TEXT NOT NULL,
   active_containers     INTEGER NOT NULL,
   active_rules          INTEGER NOT NULL,

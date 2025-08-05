@@ -39,7 +39,7 @@ enum CleanupResource {
     DatabaseContainer {
         id: String,
     },
-    WhalewallFilterRules,
+    HarborshieldFilterRules,
 }
 
 #[derive(Debug)]
@@ -156,10 +156,10 @@ impl CleanupTracker {
     }
 
     /// Register Harborshield filter rules for cleanup
-    pub async fn register_whalewall_filter_rules(&self) -> Result<()> {
+    pub async fn register_harborshield_filter_rules(&self) -> Result<()> {
         self.cleanup_tx
             .send(CleanupRequest::Register(
-                CleanupResource::WhalewallFilterRules,
+                CleanupResource::HarborshieldFilterRules,
             ))
             .await
             .map_err(|_| Error::invalid_state("Cleanup tracker closed", "open", "closed"))?;
@@ -257,7 +257,7 @@ fn matches_resource(a: &CleanupResource, b: &CleanupResource) -> bool {
             CleanupResource::DatabaseContainer { id: id1 },
             CleanupResource::DatabaseContainer { id: id2 },
         ) => id1 == id2,
-        (CleanupResource::WhalewallFilterRules, CleanupResource::WhalewallFilterRules) => true,
+        (CleanupResource::HarborshieldFilterRules, CleanupResource::HarborshieldFilterRules) => true,
         _ => false,
     }
 }
@@ -474,7 +474,7 @@ async fn cleanup_resource(resource: &CleanupResource, db: &Arc<Mutex<DB>>) -> Re
                 }
             }
         }
-        CleanupResource::WhalewallFilterRules => {
+        CleanupResource::HarborshieldFilterRules => {
             warn!("Cleaning up all Harborshield rules from filter table");
 
             // First, get a list of all Harborshield chains (hs-* chains)
@@ -483,7 +483,7 @@ async fn cleanup_resource(resource: &CleanupResource, db: &Arc<Mutex<DB>>) -> Re
                 .output()
                 .map_err(|e| crate::Error::Config {
                     message: format!("Failed to list filter table: {}", e),
-                    location: "cleanup_whalewall_filter_rules".to_string(),
+                    location: "cleanup_harborshield_filter_rules".to_string(),
                     suggestion: Some("Check nftables permissions".to_string()),
                 })?;
 
@@ -554,11 +554,11 @@ async fn cleanup_resource(resource: &CleanupResource, db: &Arc<Mutex<DB>>) -> Re
             }
 
             // Also flush the main harborshield chain
-            let flush_whalewall = std::process::Command::new("nft")
+            let flush_harborshield = std::process::Command::new("nft")
                 .args(&["flush", "chain", "ip", "filter", "harborshield"])
                 .output();
 
-            if let Err(e) = flush_whalewall {
+            if let Err(e) = flush_harborshield {
                 warn!("Failed to flush harborshield chain: {}", e);
             }
 

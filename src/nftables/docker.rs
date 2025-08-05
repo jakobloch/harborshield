@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    nftables::{DOCKER_USER_CHAIN, FILTER_TABLE, INPUT_CHAIN, OUTPUT_CHAIN, WHALEWALL_CHAIN},
+    nftables::{DOCKER_USER_CHAIN, FILTER_TABLE, HARBORSHIELD_CHAIN, INPUT_CHAIN, OUTPUT_CHAIN},
 };
 use nftables::{
     batch::Batch,
@@ -115,13 +115,13 @@ pub async fn check_docker_chains() -> Result<(bool, bool, bool, bool)> {
 }
 
 /// Create harborshield chain in filter table
-pub fn create_whalewall_chain(batch: &mut Batch<'static>, family: NfFamily) {
+pub fn create_harborshield_chain(batch: &mut Batch<'static>, family: NfFamily) {
     debug!("Creating harborshield chain in filter table");
 
     batch.add(NfListObject::Chain(Chain {
         family,
         table: Cow::Borrowed(FILTER_TABLE),
-        name: Cow::Borrowed(WHALEWALL_CHAIN),
+        name: Cow::Borrowed(HARBORSHIELD_CHAIN),
         newname: None,
         handle: None,
         _type: Some(NfChainType::Filter),
@@ -149,7 +149,7 @@ pub fn create_jump_rules(
             expr: Cow::Owned(vec![
                 Statement::Counter(Counter::Anonymous(None)),
                 Statement::Jump(JumpTarget {
-                    target: Cow::Borrowed(WHALEWALL_CHAIN),
+                    target: Cow::Borrowed(HARBORSHIELD_CHAIN),
                 }),
             ]),
             handle: None,
@@ -189,13 +189,13 @@ pub fn create_jump_rules(
 }
 
 /// Check if harborshield chain already exists in filter table
-pub async fn check_whalewall_chain_exists() -> Result<bool> {
+pub async fn check_harborshield_chain_exists() -> Result<bool> {
     let output = std::process::Command::new("nft")
         .args(&["-j", "list", "chains", "ip", "filter"])
         .output()
         .map_err(|e| Error::Config {
             message: format!("Failed to list filter chains: {}", e),
-            location: "check_whalewall_chain_exists".to_string(),
+            location: "check_harborshield_chain_exists".to_string(),
             suggestion: Some("Ensure nftables is installed".to_string()),
         })?;
 
@@ -205,7 +205,7 @@ pub async fn check_whalewall_chain_exists() -> Result<bool> {
     }
 
     let json_output = String::from_utf8_lossy(&output.stdout);
-    Ok(json_output.contains(&format!(r#""name":"{}""#, WHALEWALL_CHAIN)))
+    Ok(json_output.contains(&format!(r#""name":"{}""#, HARBORSHIELD_CHAIN)))
 }
 
 /// Check if jump rules already exist
@@ -243,7 +243,7 @@ pub async fn check_jump_rules_exist() -> Result<(bool, bool, bool)> {
                             for expr_item in expr_array {
                                 if let Some(jump) = expr_item.get("jump") {
                                     if let Some(target) = jump.get("target") {
-                                        if target.as_str() == Some(WHALEWALL_CHAIN) {
+                                        if target.as_str() == Some(HARBORSHIELD_CHAIN) {
                                             match chain_name {
                                                 DOCKER_USER_CHAIN => docker_user_jump = true,
                                                 INPUT_CHAIN => input_jump = true,

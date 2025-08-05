@@ -223,7 +223,7 @@ impl Harborshield {
                 container.name
             );
 
-            if container.is_whalewall_enabled() {
+            if container.is_harborshield_enabled() {
                 // Check if container has rules that reference other containers
                 if let Some(config) = &container.config {
                     let has_container_refs = config.output.iter().any(|r| !r.container.is_empty());

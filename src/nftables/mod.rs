@@ -8,8 +8,8 @@ use crate::{
     docker::config::{Config, RuleContext, ToNftablesRule},
     nftables::{
         docker::{
-            check_docker_chains, check_jump_rules_exist, check_whalewall_chain_exists,
-            create_jump_rules, create_whalewall_chain,
+            check_docker_chains, check_harborshield_chain_exists, check_jump_rules_exist,
+            create_harborshield_chain, create_jump_rules,
         },
         transaction::NftablesTransaction,
     },
@@ -34,7 +34,7 @@ pub const FILTER_TABLE: &str = "filter";
 pub const DOCKER_USER_CHAIN: &str = "DOCKER-USER";
 pub const INPUT_CHAIN: &str = "INPUT";
 pub const OUTPUT_CHAIN: &str = "OUTPUT";
-pub const WHALEWALL_CHAIN: &str = "harborshield";
+pub const HARBORSHIELD_CHAIN: &str = "harborshield";
 
 #[derive(Builder)]
 /// Nftables client that integrates with Docker's filter table
@@ -66,7 +66,7 @@ impl NftablesClient {
         batch.delete(NfListObject::Chain(Chain {
             family: self.family,
             table: Cow::Borrowed(FILTER_TABLE),
-            name: Cow::Borrowed(WHALEWALL_CHAIN),
+            name: Cow::Borrowed(HARBORSHIELD_CHAIN),
             newname: None,
             handle: None,
             _type: None,
@@ -80,7 +80,7 @@ impl NftablesClient {
         batch.add(NfListObject::Chain(Chain {
             family: self.family,
             table: Cow::Borrowed(FILTER_TABLE),
-            name: Cow::Borrowed(WHALEWALL_CHAIN),
+            name: Cow::Borrowed(HARBORSHIELD_CHAIN),
             newname: None,
             handle: None,
             _type: None,
@@ -189,8 +189,8 @@ impl NftablesClient {
         let mut batch = self.batch.lock().await;
 
         // Check if harborshield chain already exists
-        let whalewall_exists =
-            check_whalewall_chain_exists()
+        let harborshield_exists =
+            check_harborshield_chain_exists()
                 .await
                 .map_err(|e| Error::Nftables {
                     message: format!("Failed to check harborshield chain existence: {}", e),
@@ -199,9 +199,9 @@ impl NftablesClient {
                     stderr: None,
                 })?;
 
-        if !whalewall_exists {
+        if !harborshield_exists {
             // Create harborshield chain in filter table
-            create_whalewall_chain(&mut batch, self.family);
+            create_harborshield_chain(&mut batch, self.family);
         }
 
         // Check which jump rules already exist
@@ -369,8 +369,10 @@ impl NftablesClient {
 
         let mut batch = self.batch.lock().await;
 
-        if let Some(whalewall_chain) = helpers::find_chain(FILTER_TABLE, WHALEWALL_CHAIN)? {
-            batch.add_cmd(NfCmd::Flush(FlushObject::Chain(whalewall_chain.to_owned())));
+        if let Some(harborshield_chain) = helpers::find_chain(FILTER_TABLE, HARBORSHIELD_CHAIN)? {
+            batch.add_cmd(NfCmd::Flush(FlushObject::Chain(
+                harborshield_chain.to_owned(),
+            )));
         }
 
         // Build set items for all containers
@@ -400,7 +402,7 @@ impl NftablesClient {
             let src_rule = Rule {
                 family: self.family,
                 table: Cow::Borrowed(FILTER_TABLE),
-                chain: Cow::Borrowed(WHALEWALL_CHAIN),
+                chain: Cow::Borrowed(HARBORSHIELD_CHAIN),
                 expr: Cow::Owned(vec![Statement::VerdictMap(VerdictMap {
                     key: Expression::Named(NamedExpression::Payload(Payload::PayloadField(
                         PayloadField {
@@ -419,7 +421,7 @@ impl NftablesClient {
             let dst_rule = Rule {
                 family: self.family,
                 table: Cow::Borrowed(FILTER_TABLE),
-                chain: Cow::Borrowed(WHALEWALL_CHAIN),
+                chain: Cow::Borrowed(HARBORSHIELD_CHAIN),
                 expr: Cow::Owned(vec![Statement::VerdictMap(VerdictMap {
                     key: Expression::Named(NamedExpression::Payload(Payload::PayloadField(
                         PayloadField {

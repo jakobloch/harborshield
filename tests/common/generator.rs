@@ -48,8 +48,8 @@ macro_rules! generate_compose_test {
                     .environment(Arc::new(Mutex::new(
                         TestEnvironment::builder()
                             .compose_file(compose_file.path().to_path_buf())
-                            .start_whalewall(true)
-                            .restart_whalewall(false)
+                            .start_harborshield(true)
+                            .restart_harborshield(false)
                             .test_name(stringify!($test_name).to_string())
                             .verdict_chains(verdict_chains)
                             .build()?,

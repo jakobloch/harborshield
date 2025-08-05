@@ -197,7 +197,7 @@ impl Harborshield {
         info!("Clearing all harborshield rules");
 
         // First, clear all Harborshield container chains from the filter table
-        self.clear_all_whalewall_chains().await?;
+        self.clear_all_harborshield_chains().await?;
 
         // Clear the main harborshield chain
         let mut nftables = self.nftables_client.lock().await;
@@ -227,7 +227,7 @@ impl Harborshield {
     }
 
     /// Clear all Harborshield container chains from the filter table
-    async fn clear_all_whalewall_chains(&self) -> Result<()> {
+    async fn clear_all_harborshield_chains(&self) -> Result<()> {
         info!("Clearing all Harborshield container chains from filter table");
 
         // Get a list of all Harborshield chains (hs-* chains)
@@ -236,7 +236,7 @@ impl Harborshield {
             .output()
             .map_err(|e| Error::Config {
                 message: format!("Failed to list filter table: {}", e),
-                location: "clear_all_whalewall_chains".to_string(),
+                location: "clear_all_harborshield_chains".to_string(),
                 suggestion: Some("Check nftables permissions".to_string()),
             })?;
 

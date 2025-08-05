@@ -289,7 +289,7 @@ impl Harborshield {
             if let Some(id) = &container_summary.id {
                 match self.docker_client.try_get_container_by_id(id).await {
                     Ok(container) => {
-                        if container.is_whalewall_enabled() {
+                        if container.is_harborshield_enabled() {
                             // Add to container tracker so waiting rules can find it
                             if let Err(e) = self
                                 .docker_client
@@ -364,7 +364,7 @@ impl Harborshield {
                 if let Some(id) = &container_summary.id {
                     match self.docker_client.try_get_container_by_id(id).await {
                         Ok(container) => {
-                            if container.is_whalewall_enabled() {
+                            if container.is_harborshield_enabled() {
                                 info!(
                                     "Found harborshield-enabled container not yet running: {} (state: {:?})",
                                     container.name, container_summary.state
@@ -589,7 +589,7 @@ impl Harborshield {
             .try_get_container_by_id(container_id)
             .await?;
 
-        if !container.is_whalewall_enabled() {
+        if !container.is_harborshield_enabled() {
             debug!(
                 "Container {} is not harborshield enabled, skipping",
                 container.name

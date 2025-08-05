@@ -19,19 +19,19 @@ pub struct Runner {
 
     /// Whether to use harborshield as a container
     #[builder(default = false)]
-    should_use_whalewall_container: bool,
+    should_use_harborshield_container: bool,
 
     /// Whether to restart harborshield between tests
     #[builder(default = false)]
-    restart_whalewall_between_tests: bool,
+    restart_harborshield_between_tests: bool,
 
     /// Test timeout in seconds
     #[builder(default = 600)]
     test_timeout_seconds: u64,
 }
 impl Runner {
-    fn get_should_use_whalewall_container(&self) -> bool {
-        self.should_use_whalewall_container
+    fn get_should_use_harborshield_container(&self) -> bool {
+        self.should_use_harborshield_container
     }
     fn get_test_timeout_seconds(&self) -> u64 {
         self.test_timeout_seconds
@@ -45,15 +45,15 @@ impl Runner {
         eprintln!("🚀 Initializing test runner...");
 
         // Start harborshield if needed
-        if self.get_should_use_whalewall_container() {
-            self.start_whalewall_container().await?;
+        if self.get_should_use_harborshield_container() {
+            self.start_harborshield_container().await?;
         }
 
         Ok(())
     }
 
     /// Start harborshield as a container
-    async fn start_whalewall_container(
+    async fn start_harborshield_container(
         &self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("🐳 Starting harborshield as a container...");
@@ -118,7 +118,7 @@ impl Runner {
     }
 
     /// Stop harborshield container
-    async fn stop_whalewall_container(
+    async fn stop_harborshield_container(
         &self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _ = std::process::Command::new("docker")
@@ -174,8 +174,8 @@ impl Runner {
     async fn cleanup(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("\n🧹 Cleaning up test runner...");
 
-        if self.get_should_use_whalewall_container() {
-            self.stop_whalewall_container().await?;
+        if self.get_should_use_harborshield_container() {
+            self.stop_harborshield_container().await?;
         }
 
         // The TestEnvironment will clean up when dropped

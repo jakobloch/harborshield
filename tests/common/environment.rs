@@ -38,7 +38,7 @@ pub struct TestEnvironment {
     project_name: String,
     temp_dir: Arc<TempDir>,
     db_path: PathBuf,
-    whalewall_process: Option<std::process::Child>,
+    harborshield_process: Option<std::process::Child>,
     test_name: String,
     verdict_chains: Vec<String>,
 }
@@ -50,7 +50,7 @@ impl Clone for TestEnvironment {
             project_name: self.project_name.clone(),
             temp_dir: self.temp_dir.clone(),
             db_path: self.db_path.clone(),
-            whalewall_process: None,
+            harborshield_process: None,
             test_name: self.test_name.clone(),
             verdict_chains: self.verdict_chains.clone(),
         }
@@ -62,13 +62,13 @@ impl TestEnvironment {
     #[builder]
     pub fn new(
         compose_file: Option<PathBuf>,
-        start_whalewall: bool,
-        restart_whalewall: Option<bool>,
+        start_harborshield: bool,
+        restart_harborshield: Option<bool>,
         test_name: Option<String>,
         verdict_chains: Option<Vec<String>>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // Check for clean environment before starting
-        let should_restart = restart_whalewall.unwrap_or(true);
+        let should_restart = restart_harborshield.unwrap_or(true);
         Self::check_and_cleanup_environment(should_restart)?;
 
         let temp_dir = TempDir::new()?;
@@ -86,16 +86,16 @@ impl TestEnvironment {
             project_name,
             temp_dir: Arc::new(temp_dir),
             db_path,
-            whalewall_process: None,
+            harborshield_process: None,
             test_name: test_name.unwrap_or_else(|| "unknown_test".to_string()),
             verdict_chains: verdict_chains.unwrap_or_default(),
         };
 
         // If we have a compose file provided, use it; otherwise create a default network
         if use_compose {
-            if start_whalewall {
+            if start_harborshield {
                 // Start compose and harborshield together with chained command
-                env.start_compose_and_whalewall()?;
+                env.start_compose_and_harborshield()?;
             } else {
                 env.start_compose()?;
                 // Wait for services to be ready
@@ -104,8 +104,8 @@ impl TestEnvironment {
         } else {
             // Create a default network for individual test containers
             env.create_default_network()?;
-            if start_whalewall {
-                env.start_whalewall()?;
+            if start_harborshield {
+                env.start_harborshield()?;
             }
         }
 
@@ -162,7 +162,7 @@ impl TestEnvironment {
         Ok(())
     }
 
-    fn start_compose_and_whalewall(
+    fn start_compose_and_harborshield(
         &mut self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Create verdict chains before starting compose/harborshield
@@ -173,12 +173,12 @@ impl TestEnvironment {
         eprintln!("🐳 Starting Docker Compose services and harborshield together...");
 
         // Build harborshield first if needed
-        let whalewall_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let harborshield_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("debug")
             .join("harborshield");
 
-        if !whalewall_binary.exists() {
+        if !harborshield_binary.exists() {
             eprintln!("📦 Building harborshield...");
             let mut cmd = Command::new("cargo");
             cmd.args(&["build", "--bin", "harborshield"]);
@@ -208,7 +208,7 @@ impl TestEnvironment {
         }
 
         std::fs::create_dir_all(&log_dir)?;
-        let log_file_path = log_dir.join(format!("whalewall_compose_{}.log", timestamp));
+        let log_file_path = log_dir.join(format!("harborshield_compose_{}.log", timestamp));
 
         // Create a shell command that runs compose and then harborshield, redirecting harborshield's stderr to log file
         eprintln!(
@@ -221,7 +221,7 @@ impl TestEnvironment {
             self.project_name,
             self.compose_file.to_str().unwrap(),
             self.project_name,
-            whalewall_binary.to_str().unwrap(),
+            harborshield_binary.to_str().unwrap(),
             self.temp_dir.path().to_str().unwrap(),
             log_file_path.to_str().unwrap()
         );
@@ -229,7 +229,7 @@ impl TestEnvironment {
         eprintln!("Running: {}", full_command);
 
         // Also create a separate log for the shell command output
-        let shell_log_path = log_dir.join(format!("whalewall_compose_shell_{}.log", timestamp));
+        let shell_log_path = log_dir.join(format!("harborshield_compose_shell_{}.log", timestamp));
         eprintln!(
             "📝 Shell output will be saved to: {}",
             shell_log_path.display()
@@ -247,7 +247,7 @@ impl TestEnvironment {
             .stderr(Stdio::piped())
             .spawn()?;
 
-        self.whalewall_process = Some(child);
+        self.harborshield_process = Some(child);
 
         // Wait for everything to be ready
         thread::sleep(Duration::from_secs(5));
@@ -309,15 +309,15 @@ impl TestEnvironment {
         Ok(())
     }
 
-    pub fn start_whalewall(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn start_harborshield(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Path to debug binary
-        let whalewall_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let harborshield_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("debug")
             .join("harborshield");
 
         // Check if debug binary exists
-        if !whalewall_binary.exists() {
+        if !harborshield_binary.exists() {
             eprintln!("📦 Debug binary not found, building harborshield...");
 
             // Build harborshield binary in debug mode
@@ -357,10 +357,10 @@ impl TestEnvironment {
         }
 
         std::fs::create_dir_all(&log_dir)?;
-        let log_file_path = log_dir.join(format!("whalewall_compose_{}.log", timestamp));
+        let log_file_path = log_dir.join(format!("harborshield_compose_{}.log", timestamp));
         let log_file = std::fs::File::create(&log_file_path)?;
 
-        let child = Command::new(&whalewall_binary)
+        let child = Command::new(&harborshield_binary)
             .args(&[
                 "--data-dir",
                 self.temp_dir.path().to_str().unwrap(),
@@ -378,7 +378,7 @@ impl TestEnvironment {
         // Give harborshield a moment to start
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        self.whalewall_process = Some(child);
+        self.harborshield_process = Some(child);
 
         // Wait for harborshield to initialize
         thread::sleep(Duration::from_secs(3));
@@ -386,8 +386,8 @@ impl TestEnvironment {
         Ok(())
     }
 
-    pub fn stop_whalewall(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(mut process) = self.whalewall_process.take() {
+    pub fn stop_harborshield(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(mut process) = self.harborshield_process.take() {
             // Send SIGTERM
             #[cfg(unix)]
             {
@@ -429,16 +429,16 @@ impl TestEnvironment {
         Ok(())
     }
 
-    pub fn get_whalewall_logs_and_rules(
+    pub fn get_harborshield_logs_and_rules(
         &self,
     ) -> (
         Result<String, Box<dyn std::error::Error + Send + Sync>>,
         Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>,
     ) {
-        (self.get_whalewall_logs(), self.get_whalewall_rules())
+        (self.get_harborshield_logs(), self.get_harborshield_rules())
     }
 
-    pub fn get_whalewall_logs(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn get_harborshield_logs(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Read logs from permanent log directory - find the most recent log file
         let test_name = self.get_test_name();
         let log_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -452,7 +452,7 @@ impl TestEnvironment {
                     e.path().extension() == Some(std::ffi::OsStr::new("log"))
                         && e.file_name()
                             .to_string_lossy()
-                            .starts_with("whalewall_compose_")
+                            .starts_with("harborshield_compose_")
                 })
                 .collect();
 
@@ -472,7 +472,7 @@ impl TestEnvironment {
         }
 
         // Check if harborshield is still running without mutation
-        if let Some(ref child) = self.whalewall_process {
+        if let Some(ref child) = self.harborshield_process {
             let pid = child.id();
 
             // Use kill with signal 0 to check if process exists
@@ -861,36 +861,36 @@ impl TestEnvironment {
         }
     }
 
-    pub fn get_whalewall_rules(
+    pub fn get_harborshield_rules(
         &self,
     ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
         let parsed = self.check_nftables_rules()?;
-        let mut whalewall_rules = Vec::new();
+        let mut harborshield_rules = Vec::new();
 
         // Look for inet harborshield table in the JSON
         if let Some(nftables) = parsed.get("nftables").and_then(|n| n.as_array()) {
-            let mut found_whalewall_table = false;
+            let mut found_harborshield_table = false;
 
             for item in nftables {
                 if let Some(table) = item.get("table") {
                     if table.get("family").and_then(|f| f.as_str()) == Some("inet")
                         && table.get("name").and_then(|n| n.as_str()) == Some("harborshield")
                     {
-                        found_whalewall_table = true;
-                        whalewall_rules.push("table inet harborshield {".to_string());
+                        found_harborshield_table = true;
+                        harborshield_rules.push("table inet harborshield {".to_string());
                     }
-                } else if found_whalewall_table {
+                } else if found_harborshield_table {
                     // Add chains and rules from harborshield table
                     if let Some(chain) = item.get("chain") {
                         if let Some(name) = chain.get("name").and_then(|n| n.as_str()) {
-                            whalewall_rules.push(format!("\tchain {} {{", name));
+                            harborshield_rules.push(format!("\tchain {} {{", name));
                         }
                     }
                 }
             }
         }
 
-        Ok(whalewall_rules)
+        Ok(harborshield_rules)
     }
 
     pub fn get_docker_filter_rules(
@@ -1224,7 +1224,7 @@ impl TestEnvironment {
             .output();
 
         // Clean up Harborshield chains from Docker filter table
-        self.cleanup_whalewall_filter_chains()?;
+        self.cleanup_harborshield_filter_chains()?;
 
         // Clean up test verdict chains
         self.cleanup_verdict_chains()?;
@@ -1262,7 +1262,7 @@ impl TestEnvironment {
         Ok(())
     }
 
-    fn cleanup_whalewall_filter_chains(
+    fn cleanup_harborshield_filter_chains(
         &self,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get list of chains in filter table
@@ -1311,7 +1311,7 @@ impl TestEnvironment {
     }
 
     fn check_and_cleanup_environment(
-        restart_whalewall: bool,
+        restart_harborshield: bool,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Check for leftover test containers
         let output = Command::new("docker")
@@ -1338,7 +1338,7 @@ impl TestEnvironment {
         }
 
         // Also clean up leftover harborshield processes
-        Self::force_cleanup_whalewall_processes()?;
+        Self::force_cleanup_harborshield_processes()?;
 
         // Check for leftover nftables rules (if root)
         let euid = unsafe { libc::geteuid() };
@@ -1359,7 +1359,7 @@ impl TestEnvironment {
             }
 
             // Also clean up Harborshield chains from filter table
-            Self::cleanup_whalewall_filter_chains_static()?;
+            Self::cleanup_harborshield_filter_chains_static()?;
         }
 
         // Check if harborshield is already running
@@ -1371,7 +1371,7 @@ impl TestEnvironment {
             if output.status.success() && !output.stdout.is_empty() {
                 eprintln!("⚠️  Found running harborshield process!");
 
-                if restart_whalewall {
+                if restart_harborshield {
                     eprintln!("🔔 Attempting to stop it...");
 
                     // Try to kill the processes
@@ -1424,7 +1424,7 @@ impl TestEnvironment {
         Ok(())
     }
 
-    fn cleanup_whalewall_filter_chains_static()
+    fn cleanup_harborshield_filter_chains_static()
     -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get list of chains in filter table
         let list_output = Command::new("nft")
@@ -1478,7 +1478,7 @@ impl TestEnvironment {
         Ok(())
     }
 
-    fn force_cleanup_whalewall_processes() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn force_cleanup_harborshield_processes() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Kill all harborshield test processes
         let output = Command::new("pgrep")
             .args(&["-f", "harborshield.*--data-dir"])
@@ -1592,7 +1592,7 @@ impl TestEnvironment {
 impl Drop for TestEnvironment {
     fn drop(&mut self) {
         // Stop harborshield first
-        if let Err(e) = self.stop_whalewall() {
+        if let Err(e) = self.stop_harborshield() {
             eprintln!("Failed to stop harborshield in cleanup: {:?}", e);
         }
 

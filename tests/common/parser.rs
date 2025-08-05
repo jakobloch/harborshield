@@ -41,8 +41,8 @@ impl ComposeParser {
 
         // Extract verdict chains from all services
         for (_, service) in compose.services.iter() {
-            if Self::has_whalewall_enabled(service) {
-                if let Some(rules_yaml) = Self::get_whalewall_rules(service) {
+            if Self::has_harborshield_enabled(service) {
+                if let Some(rules_yaml) = Self::get_harborshield_rules(service) {
                     if let Ok(rules_value) = serde_yaml::from_str::<serde_yaml::Value>(rules_yaml) {
                         // Check mapped_ports for verdict chains
                         if let Some(mapped_ports) = rules_value.get("mapped_ports") {
@@ -121,7 +121,7 @@ impl ComposeParser {
     ) -> Vec<(String, String, String)> {
         let mut cross_network_rules = Vec::new();
 
-        if let Some(rules_yaml) = Self::get_whalewall_rules(service) {
+        if let Some(rules_yaml) = Self::get_harborshield_rules(service) {
             if let Ok(config) = serde_yaml::from_str::<Config>(rules_yaml) {
                 for rule in &config.output {
                     if !rule.network.is_empty() && !rule.container.is_empty() {
@@ -165,24 +165,24 @@ impl ComposeParser {
         }
 
         // Count harborshield-enabled services
-        let whalewall_enabled_count = services
+        let harborshield_enabled_count = services
             .iter()
-            .filter(|(_, service)| Self::has_whalewall_enabled(service))
+            .filter(|(_, service)| Self::has_harborshield_enabled(service))
             .count();
         eprintln!(
             "🔒 {} services have harborshield enabled",
-            whalewall_enabled_count
+            harborshield_enabled_count
         );
 
         // Add chain creation assertion
         eprintln!(
             "➕ Adding assertion: Check chain creation (expecting {} chains)",
-            whalewall_enabled_count
+            harborshield_enabled_count
         );
         assertions.push(NamedAssertion {
             name: "Check chain creation".to_string(),
             assertion: Box::new(NftablesAssertions::assert_chains_created(
-                whalewall_enabled_count,
+                harborshield_enabled_count,
             )),
         });
 
@@ -204,23 +204,23 @@ impl ComposeParser {
         });
 
         // Add individual service chain assertions for harborshield-enabled services
-        let mut whalewall_enabled_services = Vec::new();
+        let mut harborshield_enabled_services = Vec::new();
         for (service_name, service) in &services {
-            if Self::has_whalewall_enabled(service) {
-                whalewall_enabled_services.push(service_name.clone());
+            if Self::has_harborshield_enabled(service) {
+                harborshield_enabled_services.push(service_name.clone());
             }
         }
 
-        if !whalewall_enabled_services.is_empty() {
+        if !harborshield_enabled_services.is_empty() {
             eprintln!("➕ Adding assertion: Verify individual service chains and labels");
             eprintln!("   Services to check:");
-            for service in &whalewall_enabled_services {
+            for service in &harborshield_enabled_services {
                 eprintln!("   - {}", service);
             }
             assertions.push(NamedAssertion {
                 name: "Verify individual service chains and labels".to_string(),
                 assertion: Box::new(NftablesAssertions::assert_service_chains_and_labels(
-                    whalewall_enabled_services.clone(),
+                    harborshield_enabled_services.clone(),
                 )),
             });
         }
@@ -231,10 +231,10 @@ impl ComposeParser {
 
         eprintln!("🔍 Analyzing service rules...");
         for (service_name, service) in &services {
-            if Self::has_whalewall_enabled(service) {
+            if Self::has_harborshield_enabled(service) {
                 eprintln!("  📋 Checking rules for service: {}", service_name);
                 // Check for port rules
-                if let Some(rules_yaml) = Self::get_whalewall_rules(service) {
+                if let Some(rules_yaml) = Self::get_harborshield_rules(service) {
                     // First, validate the rules by parsing them as Config
                     match serde_yaml::from_str::<Config>(rules_yaml) {
                         Ok(_config) => {
@@ -351,8 +351,8 @@ impl ComposeParser {
 
         eprintln!("🔍 Analyzing advanced rule features...");
         for (service_name, service) in &services {
-            if Self::has_whalewall_enabled(service) {
-                if let Some(rules_yaml) = Self::get_whalewall_rules(service) {
+            if Self::has_harborshield_enabled(service) {
+                if let Some(rules_yaml) = Self::get_harborshield_rules(service) {
                     // Validate rules first
                     match serde_yaml::from_str::<Config>(rules_yaml) {
                         Ok(_) => {
@@ -536,7 +536,7 @@ impl ComposeParser {
         let mut all_cross_network_rules = Vec::new();
         eprintln!("🔍 Analyzing cross-network dependencies...");
         for (service_name, service) in &services {
-            if Self::has_whalewall_enabled(service) {
+            if Self::has_harborshield_enabled(service) {
                 let cross_network_rules = Self::extract_cross_network_rules(service_name, service);
                 if !cross_network_rules.is_empty() {
                     eprintln!(
@@ -579,7 +579,7 @@ impl ComposeParser {
     }
 
     // Helper methods
-    fn has_whalewall_enabled(service: &Service) -> bool {
+    fn has_harborshield_enabled(service: &Service) -> bool {
         match &service.labels {
             compose_spec::ListOrMap::Map(map) => {
                 if let Some(value) = map.get("harborshield.enabled") {
@@ -603,7 +603,7 @@ impl ComposeParser {
         }
     }
 
-    fn get_whalewall_rules(service: &Service) -> Option<&str> {
+    fn get_harborshield_rules(service: &Service) -> Option<&str> {
         match &service.labels {
             compose_spec::ListOrMap::Map(map) => map
                 .get("harborshield.rules")

@@ -172,27 +172,27 @@ pub fn setup_metrics() -> Result<PrometheusHandle> {
 
     // Register some custom metrics
     metrics::describe_counter!(
-        "whalewall_rules_applied_total",
+        "harborshield_rules_applied_total",
         "Total number of firewall rules applied"
     );
     metrics::describe_counter!(
-        "whalewall_containers_tracked_total",
+        "harborshield_containers_tracked_total",
         "Total number of containers being tracked"
     );
     metrics::describe_counter!(
-        "whalewall_errors_total",
+        "harborshield_errors_total",
         "Total number of errors encountered"
     );
     metrics::describe_gauge!(
-        "whalewall_active_containers",
+        "harborshield_active_containers",
         "Number of currently active containers"
     );
     metrics::describe_gauge!(
-        "whalewall_active_rules",
+        "harborshield_active_rules",
         "Number of currently active firewall rules"
     );
     metrics::describe_histogram!(
-        "whalewall_rule_apply_duration_seconds",
+        "harborshield_rule_apply_duration_seconds",
         "Time taken to apply firewall rules"
     );
 
@@ -201,25 +201,25 @@ pub fn setup_metrics() -> Result<PrometheusHandle> {
 
 // Metrics helper functions
 pub fn increment_rules_applied() {
-    metrics::counter!("whalewall_rules_applied_total").increment(1);
+    metrics::counter!("harborshield_rules_applied_total").increment(1);
 }
 
 pub fn increment_containers_tracked() {
-    metrics::counter!("whalewall_containers_tracked_total").increment(1);
+    metrics::counter!("harborshield_containers_tracked_total").increment(1);
 }
 
 pub fn increment_errors() {
-    metrics::counter!("whalewall_errors_total").increment(1);
+    metrics::counter!("harborshield_errors_total").increment(1);
 }
 
 pub fn set_active_containers(count: u64) {
-    metrics::gauge!("whalewall_active_containers").set(count as f64);
+    metrics::gauge!("harborshield_active_containers").set(count as f64);
 }
 
 pub fn set_active_rules(count: u64) {
-    metrics::gauge!("whalewall_active_rules").set(count as f64);
+    metrics::gauge!("harborshield_active_rules").set(count as f64);
 }
 
 pub fn record_rule_apply_duration(duration: std::time::Duration) {
-    metrics::histogram!("whalewall_rule_apply_duration_seconds").record(duration.as_secs_f64());
+    metrics::histogram!("harborshield_rule_apply_duration_seconds").record(duration.as_secs_f64());
 }

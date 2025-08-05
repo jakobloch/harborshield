@@ -475,7 +475,7 @@ impl Container {
     }
 
     /// Check if harborshield is enabled for a container
-    pub fn is_whalewall_enabled(&self) -> bool {
+    pub fn is_harborshield_enabled(&self) -> bool {
         self.labels
             .get(ENABLED_LABEL)
             .map(|v| v == "true")
