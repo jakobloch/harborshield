@@ -2,6 +2,7 @@
 name = "harborshield"
 version = "0.1.0"
 edition = "2024"
+description = "Automate management of firewall rules for Docker containers"
 
 [dependencies]
 bon = "3.6.5"
