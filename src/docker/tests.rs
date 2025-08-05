@@ -7,6 +7,7 @@ mod tests {
     };
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Once;
+    use temp_env::{async_with_vars, with_vars};
 
     static INIT: Once = Once::new();
 
@@ -306,7 +307,6 @@ mod tests {
     #[test]
     fn test_docker_env_parsing() {
         init_test();
-        use std::env;
 
         // Test DOCKER_HOST environment variable handling
         let test_cases = vec![
@@ -319,41 +319,31 @@ mod tests {
         ];
 
         for (docker_host, _needs_tls_check, _description) in test_cases {
-            // Set and unset env vars in a controlled way
-            env::set_var("DOCKER_HOST", docker_host);
+            // Set env vars using temp_env
+            with_vars(vec![("DOCKER_HOST", Some(docker_host))], || {
+                // Wrap in catch_unwind to handle crypto provider panic
+                let result = std::panic::catch_unwind(|| DockerClient::builder().build());
 
-            // Wrap in catch_unwind to handle crypto provider panic
-            let result = std::panic::catch_unwind(|| DockerClient::builder().build());
+                // If it panicked due to crypto provider, skip this iteration
+                if result.is_err() {
+                    eprintln!("Skipping test case due to crypto provider issue");
+                    return;
+                }
 
-            // If it panicked due to crypto provider, skip this iteration
-            if result.is_err() {
-                env::remove_var("DOCKER_HOST");
-                eprintln!("Skipping test case due to crypto provider issue");
-                continue;
-            }
-
-            // For unix sockets and HTTP, this should work (or fail gracefully)
-            // For TLS, it will fail due to missing certificates
-            // All connection attempts will fail in tests without a real Docker daemon
-            // We're just testing that the code paths don't panic
-            let _ = result.unwrap();
-
-            env::remove_var("DOCKER_HOST");
+                // For unix sockets and HTTP, this should work (or fail gracefully)
+                // For TLS, it will fail due to missing certificates
+                // All connection attempts will fail in tests without a real Docker daemon
+                // We're just testing that the code paths don't panic
+                let _ = result.unwrap();
+            });
         }
     }
 
     #[test]
     fn test_docker_tls_env_vars() {
         init_test();
-        use std::env;
         use std::fs;
         use tempfile::TempDir;
-
-        // Skip this test if we're in a test environment that doesn't support TLS
-        // The rustls crypto provider issue can occur in some test environments
-        let original_host = env::var("DOCKER_HOST").ok();
-        let original_tls = env::var("DOCKER_TLS_VERIFY").ok();
-        let original_cert = env::var("DOCKER_CERT_PATH").ok();
 
         // Create a temporary directory for fake certificates
         let temp_dir = TempDir::new().unwrap();
@@ -365,84 +355,64 @@ mod tests {
         fs::write(cert_path.join("key.pem"), "fake client key").unwrap();
 
         // Test with TLS verification enabled
-        env::set_var("DOCKER_HOST", "tcp://remote:2376");
-        env::set_var("DOCKER_TLS_VERIFY", "1");
-        env::set_var("DOCKER_CERT_PATH", cert_path.to_str().unwrap());
+        with_vars(
+            vec![
+                ("DOCKER_HOST", Some("tcp://remote:2376")),
+                ("DOCKER_TLS_VERIFY", Some("1")),
+                ("DOCKER_CERT_PATH", Some(cert_path.to_str().unwrap())),
+            ],
+            || {
+                // Wrap in catch_unwind to handle crypto provider panic
+                let result = std::panic::catch_unwind(|| DockerClient::builder().build());
 
-        // Wrap in catch_unwind to handle crypto provider panic
-        let result = std::panic::catch_unwind(|| DockerClient::builder().build());
-
-        // If it panicked due to crypto provider, skip the test
-        if result.is_err() {
-            // Clean up and restore
-            match original_host {
-                Some(val) => env::set_var("DOCKER_HOST", val),
-                None => env::remove_var("DOCKER_HOST"),
-            }
-            match original_tls {
-                Some(val) => env::set_var("DOCKER_TLS_VERIFY", val),
-                None => env::remove_var("DOCKER_TLS_VERIFY"),
-            }
-            match original_cert {
-                Some(val) => env::set_var("DOCKER_CERT_PATH", val),
-                None => env::remove_var("DOCKER_CERT_PATH"),
-            }
-            eprintln!("Skipping TLS test due to crypto provider issue");
-            return;
-        }
+                // If it panicked due to crypto provider, skip the test
+                if result.is_err() {
+                    eprintln!("Skipping TLS test due to crypto provider issue");
+                    return;
+                }
+            },
+        );
 
         // Test with TLS_VERIFY=true (string)
-        env::set_var("DOCKER_TLS_VERIFY", "true");
-        let _ = std::panic::catch_unwind(|| DockerClient::builder().build());
-
-        // Clean up and restore
-        match original_host {
-            Some(val) => env::set_var("DOCKER_HOST", val),
-            None => env::remove_var("DOCKER_HOST"),
-        }
-        match original_tls {
-            Some(val) => env::set_var("DOCKER_TLS_VERIFY", val),
-            None => env::remove_var("DOCKER_TLS_VERIFY"),
-        }
-        match original_cert {
-            Some(val) => env::set_var("DOCKER_CERT_PATH", val),
-            None => env::remove_var("DOCKER_CERT_PATH"),
-        }
+        with_vars(
+            vec![
+                ("DOCKER_HOST", Some("tcp://remote:2376")),
+                ("DOCKER_TLS_VERIFY", Some("true")),
+                ("DOCKER_CERT_PATH", Some(cert_path.to_str().unwrap())),
+            ],
+            || {
+                let _ = std::panic::catch_unwind(|| DockerClient::builder().build());
+            },
+        );
     }
 
     #[test]
     fn test_docker_api_version_warning() {
         init_test();
-        use std::env;
 
         // Set DOCKER_API_VERSION - should trigger a warning log
-        env::set_var("DOCKER_API_VERSION", "1.40");
+        with_vars(vec![("DOCKER_API_VERSION", Some("1.40"))], || {
+            // Create client - should work but log a warning
+            let result = DockerClient::builder().build();
 
-        // Create client - should work but log a warning
-        let result = DockerClient::builder().build();
-
-        // Check that the client stores the API version if creation succeeds
-        // The version is normalized to include 'v' prefix
-        if let Ok(client) = result {
-            assert_eq!(client.api_version(), Some("v1.40"));
-        }
-
-        env::remove_var("DOCKER_API_VERSION");
+            // Check that the client stores the API version if creation succeeds
+            // The version is normalized to include 'v' prefix
+            if let Ok(client) = result {
+                assert_eq!(client.api_version(), Some("v1.40"));
+            }
+        });
     }
 
     #[test]
     fn test_docker_api_version_unsupported() {
         init_test();
-        use std::env;
 
         // Set an unsupported API version
-        env::set_var("DOCKER_API_VERSION", "1.99");
-
-        // Create client - should fall back to default
-        let result = DockerClient::builder().build();
-        let _ = result; // Don't assert as daemon might not be running
-
-        env::remove_var("DOCKER_API_VERSION");
+        with_vars(vec![("DOCKER_API_VERSION", Some("1.99"))], || {
+            // Create client - should fall back to default
+            let result = DockerClient::builder().build();
+            let _ = result; // Don't assert as daemon might not be running
+        });
     }
 
     #[test]
@@ -463,29 +433,25 @@ mod tests {
     #[test]
     fn test_docker_cert_path_default() {
         init_test();
-        use std::env;
 
         // Test that DOCKER_CERT_PATH defaults to ~/.docker when not set
-        env::set_var("DOCKER_HOST", "tcp://remote:2376");
-        env::set_var("DOCKER_TLS_VERIFY", "1");
-        env::set_var("HOME", "/tmp/test_home");
+        with_vars(
+            vec![
+                ("DOCKER_HOST", Some("tcp://remote:2376")),
+                ("DOCKER_TLS_VERIFY", Some("1")),
+                ("HOME", Some("/tmp/test_home")),
+            ],
+            || {
+                // Wrap in catch_unwind to handle crypto provider panic
+                let result = std::panic::catch_unwind(|| DockerClient::builder().build());
 
-        // Wrap in catch_unwind to handle crypto provider panic
-        let result = std::panic::catch_unwind(|| DockerClient::builder().build());
-
-        // If it panicked due to crypto provider, skip the test
-        if result.is_err() {
-            eprintln!("Skipping test due to crypto provider issue");
-            env::remove_var("DOCKER_HOST");
-            env::remove_var("DOCKER_TLS_VERIFY");
-            env::remove_var("HOME");
-            return;
-        }
-
-        // Clean up
-        env::remove_var("DOCKER_HOST");
-        env::remove_var("DOCKER_TLS_VERIFY");
-        env::remove_var("HOME");
+                // If it panicked due to crypto provider, skip the test
+                if result.is_err() {
+                    eprintln!("Skipping test due to crypto provider issue");
+                    return;
+                }
+            },
+        );
     }
 
     #[test]
@@ -560,40 +526,40 @@ mod tests {
         init_test();
 
         // Test that version negotiation can be explicitly called
-        env::remove_var("DOCKER_API_VERSION");
+        async_with_vars(vec![("DOCKER_API_VERSION", None::<&str>)], async {
+            let result = DockerClient::builder().build();
 
-        let result = DockerClient::builder().build();
+            // The test should succeed regardless of whether Docker is running
+            assert!(result.is_ok() || result.is_err());
 
-        // The test should succeed regardless of whether Docker is running
-        assert!(result.is_ok() || result.is_err());
+            if let Ok(client) = result {
+                // Try explicit version negotiation
+                let negotiated_result = client.negotiate_version().await;
 
-        if let Ok(client) = result {
-            // Try explicit version negotiation
-            let negotiated_result = client.negotiate_version().await;
+                // Should return a client regardless of whether negotiation succeeded
+                assert!(negotiated_result.is_ok());
 
-            // Should return a client regardless of whether negotiation succeeded
-            assert!(negotiated_result.is_ok());
-
-            if let Ok(negotiated_client) = negotiated_result {
-                // The ping might fail if Docker isn't running, but that's ok
-                let _ = negotiated_client.ping().await;
+                if let Ok(negotiated_client) = negotiated_result {
+                    // The ping might fail if Docker isn't running, but that's ok
+                    let _ = negotiated_client.ping().await;
+                }
             }
-        }
+        })
+        .await;
     }
 
     #[tokio::test]
     async fn test_docker_version_override_with_negotiation() {
         init_test();
         // Test that DOCKER_API_VERSION takes precedence over negotiation
-        env::set_var("DOCKER_API_VERSION", "1.42");
+        async_with_vars(vec![("DOCKER_API_VERSION", Some("1.42"))], async {
+            let result = DockerClient::builder().build();
 
-        let result = DockerClient::builder().build();
-
-        if let Ok(client) = result {
-            // Should have the override version
-            assert_eq!(client.api_version(), Some("v1.42"));
-        }
-
-        env::remove_var("DOCKER_API_VERSION");
+            if let Ok(client) = result {
+                // Should have the override version
+                assert_eq!(client.api_version(), Some("v1.42"));
+            }
+        })
+        .await;
     }
 }
