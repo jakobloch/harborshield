@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.id, c.name \n                   FROM containers c \n                   JOIN container_aliases ca ON c.id = ca.container_id \n                   WHERE ca.container_alias = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7f936ac0609485b058fa4a29eb536ef41f7934bfd38c5dd1442ace1700d80323"
+}

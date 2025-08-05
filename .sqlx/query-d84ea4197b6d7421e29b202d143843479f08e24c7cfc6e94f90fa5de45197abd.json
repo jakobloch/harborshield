@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT src_container_id, dst_container_name, rule FROM waiting_container_rules WHERE dst_container_name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "src_container_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "dst_container_name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "rule",
+        "ordinal": 2,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d84ea4197b6d7421e29b202d143843479f08e24c7cfc6e94f90fa5de45197abd"
+}
