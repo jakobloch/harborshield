@@ -1,8 +1,6 @@
 pub mod cleanup;
 pub mod crud;
 pub mod error;
-pub mod event;
-pub mod status;
 #[cfg(test)]
 mod tests;
 pub mod utils;
@@ -23,8 +21,8 @@ use tracing::{debug, error, info};
 use super::{ENABLED_LABEL, Harborshield};
 
 impl Harborshield {
-    pub(super) fn spawn_event_listener(&self, manager: Arc<Harborshield>) -> JoinHandle<()> {
-        let manager = Arc::clone(&manager);
+    pub(super) fn spawn_event_listener(&self, handlers: Arc<Harborshield>) -> JoinHandle<()> {
+        let handlers = Arc::clone(&handlers);
 
         tokio::spawn(async move {
             let mut retry_count = 0;
@@ -32,7 +30,7 @@ impl Harborshield {
             const RETRY_DELAY: Duration = Duration::from_secs(2);
 
             loop {
-                let mut event_stream = match manager.docker_client.events().await {
+                let mut event_stream = match handlers.docker_client.events().await {
                     Ok(stream) => {
                         retry_count = 0; // Reset retry count on success
                         stream
@@ -55,14 +53,14 @@ impl Harborshield {
                     }
                 };
 
-                let mut shutdown_rx = manager.shutdown_rx.lock().await;
+                let mut shutdown_rx = handlers.shutdown_rx.lock().await;
 
                 loop {
                     tokio::select! {
                         Some(event_result) = event_stream.next() => {
                             match event_result {
                                 Ok(event) => {
-                                    if let Err(e) = manager.handle_event(
+                                    if let Err(e) = handlers.handle_event(
                                         event
                                     ).await {
                                         error!("Error handling Docker event: {}", e);

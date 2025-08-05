@@ -1,5 +1,4 @@
-use super::*;
-use crate::database::{ContainerIdentifiers, WaitingContainerRule};
+use crate::database::{ContainerIdentifiers, DB, WaitingContainerRule};
 use crate::docker::container::{Container, Network};
 use std::collections::HashMap;
 use std::sync::Arc;

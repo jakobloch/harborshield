@@ -1,9 +1,9 @@
 use clap::Parser;
-use harborshield::{check_kernel_version, parse_duration, shutdown_signal, RuleManager, VERSION};
+use harborshield::{Harborshield, VERSION, check_kernel_version, parse_duration, shutdown_signal};
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{error, info};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Automate management of firewall rules for Docker containers", long_about = None)]
@@ -107,17 +107,17 @@ async fn main() {
 
     let db_path = data_dir.join("db.sqlite");
 
-    // Create rule manager with optional health server
-    let rule_manager = match RuleManager::builder()
+    // Create rule handlers with optional health server
+    let harborshield = match Harborshield::builder()
         .db_path(&db_path)
         .timeout(args.timeout)
         .maybe_health_server_addr(args.health_server.as_deref())
         .build()
         .await
     {
-        Ok(manager) => manager,
+        Ok(handlers) => handlers,
         Err(e) => {
-            error!("Failed to initialize rule manager: {}", e);
+            error!("Failed to initialize rule handlers: {}", e);
             std::process::exit(1);
         }
     };
@@ -141,7 +141,7 @@ async fn main() {
     // Handle clear mode
     if args.clear {
         info!("Clearing all harborshield rules");
-        if let Err(e) = rule_manager.clear().await {
+        if let Err(e) = harborshield.clear().await {
             error!("Failed to clear rules: {}", e);
             std::process::exit(1);
         }
@@ -151,11 +151,11 @@ async fn main() {
     // Log version info
     info!("Starting harborshield v{}", VERSION);
 
-    // Start the rule manager
-    let rule_manager = match rule_manager.start().await {
-        Ok(started_manager) => started_manager,
+    // Start the rule handlers
+    let harborshield = match harborshield.start().await {
+        Ok(started_handlers) => started_handlers,
         Err(e) => {
-            error!("Failed to start rule manager: {}", e);
+            error!("Failed to start rule handlers: {}", e);
             std::process::exit(1);
         }
     };
@@ -164,6 +164,6 @@ async fn main() {
     shutdown_signal().await;
     info!("Shutting down");
 
-    // Stop the rule manager
-    rule_manager.stop().await;
+    // Stop the rule handlers
+    harborshield.stop().await;
 }

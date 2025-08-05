@@ -1,12 +1,18 @@
 mod common;
-pub mod docker_integration;
+pub mod docker;
 pub mod error;
 pub mod transaction;
 
 use crate::{
     Error, Result,
     docker::config::{Config, RuleContext, ToNftablesRule},
-    nftables::transaction::NftablesTransaction,
+    nftables::{
+        docker::{
+            check_docker_chains, check_jump_rules_exist, check_whalewall_chain_exists,
+            create_jump_rules, create_whalewall_chain,
+        },
+        transaction::NftablesTransaction,
+    },
 };
 use bon::{Builder, builder};
 use common::helpers;
@@ -147,8 +153,6 @@ impl NftablesClient {
 
     /// Initialize base rules in Docker's filter table
     pub async fn init_base_chains(&mut self) -> Result<()> {
-        use crate::nftables::docker_integration::*;
-
         // Check what chains exist in the filter table
         let (has_filter, has_docker_user, has_input, has_output) =
             check_docker_chains().await.map_err(|e| Error::Nftables {

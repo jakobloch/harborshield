@@ -156,13 +156,13 @@ pub enum Error {
     DockerModule(#[from] crate::docker::error::DockerError),
 
     #[error(transparent)]
-    ManagerModule(#[from] crate::manager::error::ManagerError),
+    HandlerModule(#[from] crate::handlers::error::HandlersError),
 
     #[error(transparent)]
     ValidationModule(#[from] crate::docker::config::validation::error::ValidationError),
 
     #[error(transparent)]
-    CleanupModule(#[from] crate::manager::cleanup::error::CleanupError),
+    CleanupModule(#[from] crate::handlers::cleanup::error::CleanupError),
 
     #[error(transparent)]
     SecurityModule(#[from] crate::security::error::SecurityError),

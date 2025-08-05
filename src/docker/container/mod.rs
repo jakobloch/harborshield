@@ -1,6 +1,6 @@
 use crate::docker::compose::ComposeInfo;
 use crate::docker::config::Config;
-use crate::manager::ENABLED_LABEL;
+use crate::{ENABLED_LABEL, RULES_LABEL};
 use crate::{Error, Result};
 use bon::Builder;
 use std::collections::{HashMap, HashSet};
@@ -445,7 +445,7 @@ impl Container {
             .unwrap_or(false);
 
         // Parse and validate config during container creation
-        let config = if let Some(rules_yaml) = labels.get(crate::manager::RULES_LABEL) {
+        let config = if let Some(rules_yaml) = labels.get(RULES_LABEL) {
             match serde_yaml::from_str::<Config>(rules_yaml) {
                 Ok(config) => Some(config),
                 Err(e) => {

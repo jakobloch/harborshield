@@ -2,9 +2,9 @@ use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ManagerError {
+pub enum HandlersError {
     // Initialization errors
-    #[error("Manager initialization failed: {reason}")]
+    #[error("handlers initialization failed: {reason}")]
     InitializationFailed {
         reason: String,
         component: String,
@@ -164,7 +164,7 @@ pub enum ManagerError {
     },
 }
 
-impl ManagerError {
+impl HandlersError {
     // Helper constructors
     pub fn initialization_failed(reason: impl Into<String>, component: impl Into<String>) -> Self {
         Self::InitializationFailed {

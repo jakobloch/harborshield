@@ -2,7 +2,6 @@ pub mod database;
 pub mod docker;
 pub mod error;
 pub mod handlers;
-pub mod manager;
 pub mod nftables;
 #[cfg(target_os = "linux")]
 pub mod security;
@@ -11,12 +10,11 @@ pub mod server;
 use crate::{
     database::DB,
     docker::DockerClient,
-    manager::cleanup::CleanupTracker,
+    handlers::cleanup::CleanupTracker,
     nftables::{FILTER_TABLE, NftablesClient},
 };
 use bon::bon;
 pub use error::{Error, Result};
-pub use manager::RuleManager;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -86,7 +84,7 @@ impl Harborshield {
 
         let cancellation_token = CancellationToken::new();
 
-        let manager = Self {
+        let handlers = Self {
             docker_client,
             nftables_client,
             db,
@@ -99,11 +97,11 @@ impl Harborshield {
             cancellation_token,
         };
 
-        Ok(manager)
+        Ok(handlers)
     }
 
     pub async fn start(self) -> Result<Self> {
-        info!("Starting harborshield rule manager");
+        info!("Starting harborshield rule handlers");
 
         // Clean up orphaned rules from previous runs
         self.cleanup_orphaned_rules().await?;
@@ -117,9 +115,9 @@ impl Harborshield {
         self.cleanup_stopped_containers(stopped_container_ids)
             .await?;
 
-        let manager = Arc::new(self.clone());
+        let handlers = Arc::new(self.clone());
         // Start event listener
-        let event_handle = self.spawn_event_listener(manager);
+        let event_handle = self.spawn_event_listener(handlers);
         self.task_handles.lock().unwrap().push(event_handle);
 
         // Update metrics
@@ -129,7 +127,7 @@ impl Harborshield {
     }
 
     pub async fn stop(self) {
-        info!("Stopping harborshield rule manager");
+        info!("Stopping harborshield rule handlers");
 
         // Cancel all operations
         self.cancellation_token.cancel();
@@ -192,7 +190,7 @@ impl Harborshield {
             }
         }
 
-        info!("Harborshield rule manager stopped gracefully");
+        info!("Harborshield rule handlers stopped gracefully");
     }
 
     pub async fn clear(&self) -> Result<()> {
