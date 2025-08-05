@@ -1,0 +1,299 @@
+use crate::{
+    Error, Result,
+    nftables::{DOCKER_USER_CHAIN, FILTER_TABLE, INPUT_CHAIN, OUTPUT_CHAIN, WHALEWALL_CHAIN},
+};
+use nftables::{
+    batch::Batch,
+    schema::{Chain, NfCmd, NfListObject, Rule},
+    stmt::{Counter, JumpTarget, Statement},
+    types::{NfChainType, NfFamily},
+};
+use serde_json;
+use std::borrow::Cow;
+use tracing::{debug, info, warn};
+
+/// Check if Docker filter table and chains exist
+/// Returns: (has_filter_table, has_docker_user_chain, has_input_chain, has_output_chain)
+pub async fn check_docker_chains() -> Result<(bool, bool, bool, bool)> {
+    let output = std::process::Command::new("nft")
+        .args(&["-j", "list", "tables"])
+        .output()
+        .map_err(|e| Error::Config {
+            message: format!("Failed to list nftables tables: {}", e),
+            location: "check_docker_chains".to_string(),
+            suggestion: Some("Ensure nftables is installed".to_string()),
+        })?;
+
+    if !output.status.success() {
+        return Err(Error::Config {
+            message: "Failed to list nftables tables".to_string(),
+            location: "check_docker_chains".to_string(),
+            suggestion: Some("Check nftables permissions".to_string()),
+        });
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON to check for filter table
+    let has_filter_table = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+        if let Some(nftables) = json.get("nftables").and_then(|n| n.as_array()) {
+            nftables.iter().any(|item| {
+                if let Some(table) = item.get("table") {
+                    table.get("family").and_then(|f| f.as_str()) == Some("ip")
+                        && table.get("name").and_then(|n| n.as_str()) == Some("filter")
+                } else {
+                    false
+                }
+            })
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if !has_filter_table {
+        debug!("Docker filter table not found");
+        return Ok((false, false, false, false));
+    }
+
+    // Check for specific chains
+    let output = std::process::Command::new("nft")
+        .args(&["-j", "list", "chains", "ip", "filter"])
+        .output()
+        .map_err(|e| Error::Config {
+            message: format!("Failed to list filter chains: {}", e),
+            location: "check_docker_chains".to_string(),
+            suggestion: Some("Ensure nftables is installed".to_string()),
+        })?;
+
+    if !output.status.success() {
+        return Ok((true, false, false, false));
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON to check for chains
+    let (has_docker_user, has_input, has_output) =
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+            if let Some(nftables) = json.get("nftables").and_then(|n| n.as_array()) {
+                let mut docker_user = false;
+                let mut input = false;
+                let mut output = false;
+
+                for item in nftables {
+                    if let Some(chain) = item.get("chain") {
+                        if let Some(name) = chain.get("name").and_then(|n| n.as_str()) {
+                            match name {
+                                DOCKER_USER_CHAIN => docker_user = true,
+                                INPUT_CHAIN => input = true,
+                                OUTPUT_CHAIN => output = true,
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                (docker_user, input, output)
+            } else {
+                (false, false, false)
+            }
+        } else {
+            (false, false, false)
+        };
+
+    if !has_docker_user {
+        warn!("DOCKER-USER chain not found - Docker may not be running or not using nftables");
+    }
+
+    debug!(
+        "Docker chains check - filter: true, DOCKER-USER: {}, INPUT: {}, OUTPUT: {}",
+        has_docker_user, has_input, has_output
+    );
+
+    Ok((true, has_docker_user, has_input, has_output))
+}
+
+/// Create harborshield chain in filter table
+pub fn create_whalewall_chain(batch: &mut Batch<'static>, family: NfFamily) {
+    debug!("Creating harborshield chain in filter table");
+
+    batch.add(NfListObject::Chain(Chain {
+        family,
+        table: Cow::Borrowed(FILTER_TABLE),
+        name: Cow::Borrowed(WHALEWALL_CHAIN),
+        newname: None,
+        handle: None,
+        _type: Some(NfChainType::Filter),
+        hook: None,
+        prio: None,
+        dev: None,
+        policy: None,
+    }));
+}
+
+/// Create jump rules from Docker chains to harborshield chain
+pub fn create_jump_rules(
+    batch: &mut Batch<'static>,
+    family: NfFamily,
+    has_docker_user: bool,
+    has_input: bool,
+    has_output: bool,
+) {
+    // Helper function to create a jump rule
+    let create_jump_rule = |chain_name: String| -> Rule {
+        Rule {
+            family,
+            table: Cow::Borrowed(FILTER_TABLE),
+            chain: Cow::Owned(chain_name),
+            expr: Cow::Owned(vec![
+                Statement::Counter(Counter::Anonymous(None)),
+                Statement::Jump(JumpTarget {
+                    target: Cow::Borrowed(WHALEWALL_CHAIN),
+                }),
+            ]),
+            handle: None,
+            index: None,
+            comment: Some(Cow::Borrowed("Jump to harborshield chain")),
+        }
+    };
+
+    // Always try to add jump from DOCKER-USER if it exists
+    if has_docker_user {
+        info!("Adding jump rule from DOCKER-USER to harborshield chain");
+        // Insert at the beginning of the chain
+        batch.add_cmd(NfCmd::Insert(NfListObject::Rule(create_jump_rule(
+            DOCKER_USER_CHAIN.to_owned(),
+        ))));
+    } else {
+        warn!("DOCKER-USER chain not found, Docker may not be running");
+    }
+
+    // Add jump from INPUT chain if it exists
+    if has_input {
+        debug!("Adding jump rule from INPUT to harborshield chain");
+        // Insert at the beginning of the chain
+        batch.add_cmd(NfCmd::Insert(NfListObject::Rule(create_jump_rule(
+            INPUT_CHAIN.to_owned(),
+        ))));
+    }
+
+    // Add jump from OUTPUT chain if it exists
+    if has_output {
+        debug!("Adding jump rule from OUTPUT to harborshield chain");
+        // Insert at the beginning of the chain
+        batch.add_cmd(NfCmd::Insert(NfListObject::Rule(create_jump_rule(
+            OUTPUT_CHAIN.to_owned(),
+        ))));
+    }
+}
+
+/// Check if harborshield chain already exists in filter table
+pub async fn check_whalewall_chain_exists() -> Result<bool> {
+    let output = std::process::Command::new("nft")
+        .args(&["-j", "list", "chains", "ip", "filter"])
+        .output()
+        .map_err(|e| Error::Config {
+            message: format!("Failed to list filter chains: {}", e),
+            location: "check_whalewall_chain_exists".to_string(),
+            suggestion: Some("Ensure nftables is installed".to_string()),
+        })?;
+
+    if !output.status.success() {
+        // If we can't list chains, assume it doesn't exist
+        return Ok(false);
+    }
+
+    let json_output = String::from_utf8_lossy(&output.stdout);
+    Ok(json_output.contains(&format!(r#""name":"{}""#, WHALEWALL_CHAIN)))
+}
+
+/// Check if jump rules already exist
+pub async fn check_jump_rules_exist() -> Result<(bool, bool, bool)> {
+    let output = std::process::Command::new("nft")
+        .args(&["-j", "list", "table", "ip", "filter"])
+        .output()
+        .map_err(|e| Error::Config {
+            message: format!("Failed to list filter table: {}", e),
+            location: "check_jump_rules_exist".to_string(),
+            suggestion: Some("Ensure nftables is installed".to_string()),
+        })?;
+
+    if !output.status.success() {
+        return Ok((false, false, false));
+    }
+
+    let json_str = String::from_utf8_lossy(&output.stdout);
+
+    // Parse JSON to check for jump rules more accurately
+    let mut docker_user_jump = false;
+    let mut input_jump = false;
+    let mut output_jump = false;
+
+    // Check if the JSON contains rules with jump to harborshield in each chain
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&json_str) {
+        if let Some(nftables) = json.get("nftables").and_then(|n| n.as_array()) {
+            for item in nftables {
+                if let Some(rule) = item.get("rule") {
+                    if let (Some(chain), Some(expr)) = (rule.get("chain"), rule.get("expr")) {
+                        let chain_name = chain.as_str().unwrap_or("");
+
+                        // Check if this rule has a jump to harborshield
+                        if let Some(expr_array) = expr.as_array() {
+                            for expr_item in expr_array {
+                                if let Some(jump) = expr_item.get("jump") {
+                                    if let Some(target) = jump.get("target") {
+                                        if target.as_str() == Some(WHALEWALL_CHAIN) {
+                                            match chain_name {
+                                                DOCKER_USER_CHAIN => docker_user_jump = true,
+                                                INPUT_CHAIN => input_jump = true,
+                                                OUTPUT_CHAIN => output_jump = true,
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    debug!(
+        "Jump rules exist - DOCKER-USER: {}, INPUT: {}, OUTPUT: {}",
+        docker_user_jump, input_jump, output_jump
+    );
+
+    Ok((docker_user_jump, input_jump, output_jump))
+}
+
+/// Validate that Docker environment is properly configured for Harborshield
+pub async fn validate_docker_environment() -> Result<()> {
+    let (has_filter, has_docker_user, _, _) = check_docker_chains().await?;
+
+    if !has_filter {
+        return Err(Error::Config {
+            message: "Docker is not properly configured".to_string(),
+            location: "validate_docker_environment".to_string(),
+            suggestion: Some(
+                "Docker must be installed and running with nftables/iptables support. \
+                Start Docker and ensure it creates its firewall rules."
+                    .to_string(),
+            ),
+        });
+    }
+
+    if !has_docker_user {
+        warn!(
+            "DOCKER-USER chain not found. This may indicate:\n\
+            1. Docker is using iptables-legacy instead of nftables\n\
+            2. Docker's iptables integration is disabled\n\
+            3. Docker version is too old (requires Docker 17.06+)\n\
+            Harborshield will continue but rules may not work as expected."
+        );
+    }
+
+    Ok(())
+}
