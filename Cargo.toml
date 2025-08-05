@@ -2,7 +2,8 @@
 name = "harborshield"
 version = "0.1.0"
 edition = "2024"
-description = "Automate management of firewall rules for Docker containers"
+authors = ["jakobloch <38576440+jakobloch@users.noreply.github.com>"]
+description = "A Rust port of Whalewall, to automate management of firewall rules for Docker containers"
 
 [dependencies]
 bon = "3.6.5"
@@ -94,3 +95,4 @@ uuid = { version = "1.10", features = ["v4"] }
 serde_json = "1.0"
 bon = "3.6.5"
 nix = { version = "0.30.1", features = ["process", "signal"] }
+temp-env = { version = "0.3.6", features = ["async_closure"] }
