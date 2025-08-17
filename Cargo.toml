@@ -19,7 +19,7 @@ exclude = [
     "*.log",
     ".git*",
     "target/",
-    "config/",
+    "/config/",
     ".sqlx/"
 ]
 
