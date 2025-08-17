@@ -21,3 +21,4 @@ target/
 /target
 .env
 /tests/common/logs
+compose.log

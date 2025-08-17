@@ -2,7 +2,7 @@
 name = "harborshield"
 version = "0.1.0"
 edition = "2024"
-authors = ["jakobloch <38576440+jakobloch@users.noreply.github.com>"]
+authors = ["Jakob Lochinski"]
 description = "A Rust port of Whalewall, to automate management of firewall rules for Docker containers"
 
 [dependencies]
@@ -49,7 +49,7 @@ dotenvy = "0.15"
 # Networking
 ipnet = "2.9"
 
-# nftables bindings  
+# nftables bindings
 nftables = "0.6"
 futures = "0.3.31"
 async-trait = "0.1.88"

@@ -1,0 +1,55 @@
+# Local development configuration - runs pre-compiled binary
+# First build locally: cargo build --release
+# Then use: docker-compose up
+
+services:
+  harborshield:
+    image: debian:bookworm-slim
+    container_name: harborshield
+    restart: unless-stopped
+    network_mode: host # Required to manage host nftables
+    privileged: true    # Required for full access to nftables and Docker socket
+    cap_add:
+      - NET_ADMIN # Required for nftables management
+      - NET_RAW # Required for raw socket access
+      - SYS_ADMIN # May be required for some nftables operations
+    volumes:
+      # Mount the compiled binary
+      - ./target/release/harborshield:/usr/local/bin/harborshield:ro
+      # Docker socket for monitoring containers
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # Persistent data storage
+      - harborshield_data:/data
+      # Optional: Mount config directory
+      - ./config:/config:ro
+    environment:
+      # Logging configuration
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-1}
+
+      # Docker configuration
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-}
+    # Install runtime dependencies and run the binary
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        # Update package lists and install dependencies
+        apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates libssl3 nftables > /dev/null 2>&1
+        
+        # Create data directory if it doesn't exist
+        mkdir -p /data
+        
+        # Run harborshield (use port 8090 to avoid conflict with port 8080)
+        exec /usr/local/bin/harborshield --data-dir /data --health-server 0.0.0.0:8090
+    labels:
+      harborshield.enabled: "false"
+
+networks:
+  harborshield_network:
+    driver: bridge
+
+volumes:
+  harborshield_data:
+    driver: local

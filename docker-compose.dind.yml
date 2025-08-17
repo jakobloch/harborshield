@@ -1,0 +1,51 @@
+# Alternative configuration using Docker-in-Docker for better isolation
+# Use this if the main docker-compose.yml has socket permission issues
+# First build locally: cargo build --release
+# Then use: docker-compose -f docker-compose.dind.yml up
+
+services:
+  harborshield:
+    image: docker:dind
+    container_name: harborshield
+    restart: unless-stopped
+    privileged: true    # Required for Docker-in-Docker and nftables
+    network_mode: host # Required to manage host nftables
+    volumes:
+      # Mount the compiled binary
+      - ./target/release/harborshield:/usr/local/bin/harborshield:ro
+      # Use host Docker daemon instead of dind
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # Persistent data storage
+      - harborshield_data:/data
+      # Optional: Mount config directory
+      - ./config:/config:ro
+    environment:
+      # Logging configuration
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-1}
+
+      # Docker configuration
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-}
+      
+      # Disable Docker-in-Docker daemon since we're using host socket
+      DOCKER_TLS_CERTDIR: ""
+    # Install runtime dependencies and run the binary
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        # Install required packages
+        apk add --no-cache ca-certificates nftables bash
+        
+        # Create data directory if it doesn't exist
+        mkdir -p /data
+        
+        # Run harborshield
+        exec /usr/local/bin/harborshield --data-dir /data --health-server 0.0.0.0:8080
+    labels:
+      harborshield.enabled: "false"
+
+volumes:
+  harborshield_data:
+    driver: local
