@@ -4,6 +4,24 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Jakob Lochinski"]
 description = "A Rust port of Whalewall, to automate management of firewall rules for Docker containers"
+license = "MIT"
+repository = "https://github.com/rymskip/harborshield"
+homepage = "https://github.com/rymskip/harborshield"
+documentation = "https://docs.rs/harborshield"
+readme = "README.md"
+keywords = ["docker", "firewall", "nftables", "security", "container"]
+categories = ["network-programming", "command-line-utilities"]
+exclude = [
+    "tests/",
+    "docker-compose*.yml",
+    "Dockerfile",
+    ".env*",
+    "*.log",
+    ".git*",
+    "target/",
+    "config/",
+    ".sqlx/"
+]
 
 [dependencies]
 bon = "3.6.5"
